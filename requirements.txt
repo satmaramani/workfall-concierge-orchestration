@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic
+httpx
+langgraph
+langchain
+openai
+psycopg[binary]
+numpy<2
+transformers==4.38.2
+torch==2.2.2
+pytest
+pytest-asyncio
