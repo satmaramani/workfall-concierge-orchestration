@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
         app.state.db_available = True
     except Exception:
         app.state.db_available = False
-
+        raise
     try:
         app.state.intent_classifier = build_transformer_classifier()
         app.state.transformer_available = app.state.intent_classifier is not None

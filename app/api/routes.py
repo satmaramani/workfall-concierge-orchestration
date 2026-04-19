@@ -35,18 +35,27 @@ router = APIRouter(prefix="/api/v1")
 @router.get("/health")
 def health() -> dict:
     from app.main import app
+    db_available = app.state.db_available
+    transformer_enabled = TRANSFORMER_ENABLED
+    transformer_available = app.state.transformer_available
+    openai_configured = bool(OPENAI_API_KEY)
+    status_value = "ok"
+    if not db_available:
+        status_value = "degraded"
+    elif transformer_enabled and not transformer_available and not openai_configured:
+        status_value = "degraded"
 
     return {
-        "status": "ok",
+        "status": status_value,
         "service": SERVICE_NAME,
         "port": SERVICE_PORT,
         "inventory_base_url": INVENTORY_BASE_URL,
         "invoice_base_url": INVOICE_BASE_URL,
         "market_base_url": MARKET_INTELLIGENCE_BASE_URL,
-        "db_available": app.state.db_available,
-        "openai_configured": bool(OPENAI_API_KEY),
-        "transformer_enabled": TRANSFORMER_ENABLED,
-        "transformer_available": app.state.transformer_available,
+        "db_available": db_available,
+        "openai_configured": openai_configured,
+        "transformer_enabled": transformer_enabled,
+        "transformer_available": transformer_available,
         "transformer_model": TRANSFORMER_MODEL,
         "intent_confidence_threshold": INTENT_CONFIDENCE_THRESHOLD,
         "model": OPENAI_MODEL,

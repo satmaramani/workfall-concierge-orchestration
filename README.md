@@ -1,51 +1,89 @@
 # Concierge Orchestration
 
-Primary user-facing orchestration service for the multi-agent e-commerce system.
+Primary orchestration service for the multi-agent e-commerce system. This repo is the central entrypoint for user requests and multi-agent workflow execution.
 
-## Responsibilities
+## What This Service Does
 
-- accept user requests
-- classify intent and extract entities
-- orchestrate cross-agent workflows
-- maintain workflow context
-- aggregate downstream outputs into a structured response
-
-## AI And Persistence
-
-- uses a transformer classifier first for intent detection
-- uses OpenAI Responses API for structured intent and entity parsing
-- falls back to OpenAI when transformer confidence is low or product resolution is ambiguous
-- persists session context in PostgreSQL
-- resolves products from the live Inventory catalog instead of hardcoded mappings
+- interprets user requests and resolves intent
+- loads and reuses session context across follow-up interactions
+- orchestrates Inventory, Invoice, and Market Intelligence via A2A-style communication
+- runs graph-based workflow control with LangGraph
+- aggregates downstream results into a structured workflow response
+- persists session memory and workflow traces in PostgreSQL
 
 ## Default Port
 
 `8000`
 
-## Local Run Target
+## Local Base URL
 
 `http://localhost:8000`
 
-## Planned Dependencies
+## Depends On
+
+- `inventory-agent` on `8001`
+- `invoice-agent` on `8002`
+- `market-intelligence-agent` on `8003`
+- PostgreSQL on `5432`
+- OpenAI API key for fallback parsing
+
+## PostgreSQL Requirement
+
+This service expects PostgreSQL to already be running before startup.
+
+Recommended local database settings:
+
+- host: `localhost`
+- port: `5432`
+- database: `workfall_multi_agent`
+- user: `workfall`
+- password: `workfall`
+
+Tables are created automatically on startup. You do not need to manually create Concierge tables if the configured database is reachable and the user has permission to create tables.
+
+## Tech Used Here
 
 - FastAPI
-- Uvicorn
-- Pydantic
-- httpx
 - LangGraph
-- LangChain
-- optional transformers and LLM integrations
+- OpenAI Python SDK
+- PostgreSQL via `psycopg`
+- optional transformer-based intent classification
+- Sumy-based rolling memory summarization
 
-## Run Locally
+## Environment Setup
 
-```bash
-uvicorn app.main:app --reload --port 8000
+1. Copy the example file:
+
+```powershell
+copy .env.example .env
 ```
 
-Set these first:
+2. Update values if needed, especially:
 
 - `OPENAI_API_KEY`
 - `DATABASE_URL`
+- downstream service URLs if your ports differ
+
+Example:
+
+```env
+DATABASE_URL=postgresql://workfall:workfall@localhost:5432/workfall_multi_agent
+```
+
+## Install
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## Run Locally
+
+```powershell
+uvicorn app.main:app --reload --port 8000
+```
 
 ## Key Endpoints
 
@@ -53,9 +91,19 @@ Set these first:
 - `GET /api/v1/capabilities`
 - `POST /api/v1/workflows/request`
 - `GET /api/v1/sessions/{session_id}`
+- `GET /api/v1/traces/{session_id}`
 - `POST /api/v1/a2a/request`
 
-## Repo Layout
+## Expected Local Startup Order
+
+1. PostgreSQL
+2. `inventory-agent`
+3. `market-intelligence-agent`
+4. `invoice-agent`
+5. `concierge-orchestration`
+6. optional `streamlit-ui`
+
+## Repo Structure
 
 ```text
 concierge-orchestration/
@@ -63,14 +111,18 @@ concierge-orchestration/
     api/
     clients/
     core/
-    models/
+    graphs/
     schemas/
     services/
-    agents/
-    graphs/
   tests/
   .env.example
   requirements.txt
   .gitignore
   README.md
 ```
+
+## Notes
+
+- session continuity is driven by `session_id`
+- transformer parsing is optional and falls back to OpenAI
+- this service is the main LangGraph orchestration layer in the system
