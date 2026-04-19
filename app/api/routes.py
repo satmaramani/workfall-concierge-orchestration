@@ -13,10 +13,12 @@ from app.core.config import (
     OPENAI_MODEL,
     SERVICE_NAME,
     SERVICE_PORT,
+    LANGSMITH_TRACING,
+    LANGSMITH_PROJECT,
     TRANSFORMER_ENABLED,
     TRANSFORMER_MODEL,
 )
-from app.core.security import require_agent_token
+from app.core.security import require_agent_token, require_api_token
 from app.core.utils import now_iso
 from app.schemas.common import A2AError, A2AMeta, A2ARequest, A2AResponse
 from app.schemas.workflow import WorkflowFailureResponse, WorkflowRequest
@@ -60,6 +62,8 @@ def health() -> dict:
         "intent_confidence_threshold": INTENT_CONFIDENCE_THRESHOLD,
         "model": OPENAI_MODEL,
         "langgraph_enabled": True,
+        "langsmith_tracing": LANGSMITH_TRACING,
+        "langsmith_project": LANGSMITH_PROJECT if LANGSMITH_TRACING else None,
         "timestamp": now_iso(),
     }
 
@@ -75,14 +79,17 @@ def capabilities() -> dict:
 @router.post("/workflows/request")
 async def workflow_request(
     request: WorkflowRequest,
+    x_api_token: str | None = Header(default=None),
     orchestrate=Depends(get_orchestrator),
 ) -> dict:
+    require_api_token(x_api_token)
     try:
         return await orchestrate(request)
     except HTTPException:
         raise
     except Exception as exc:
         return WorkflowFailureResponse(
+            status="failed",
             session_id=request.session_id,
             agents_used=["concierge"],
             workflow_steps=[
@@ -99,7 +106,8 @@ async def workflow_request(
 
 
 @router.get("/sessions/{session_id}")
-def get_session(session_id: str) -> dict:
+def get_session(session_id: str, x_api_token: str | None = Header(default=None)) -> dict:
+    require_api_token(x_api_token)
     session = fetch_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -107,7 +115,8 @@ def get_session(session_id: str) -> dict:
 
 
 @router.get("/traces/{session_id}")
-def get_traces(session_id: str) -> dict:
+def get_traces(session_id: str, x_api_token: str | None = Header(default=None)) -> dict:
+    require_api_token(x_api_token)
     rows = fetch_traces(session_id)
     return {
         "session_id": session_id,

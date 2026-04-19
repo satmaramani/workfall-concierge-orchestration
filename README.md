@@ -62,12 +62,15 @@ copy .env.example .env
 
 - `OPENAI_API_KEY`
 - `DATABASE_URL`
+- optional `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT`, `LANGSMITH_WORKSPACE_ID`
 - downstream service URLs if your ports differ
 
 Example:
 
 ```env
 DATABASE_URL=postgresql://workfall:workfall@localhost:5432/workfall_multi_agent
+LANGSMITH_TRACING=false
+LANGSMITH_PROJECT=workfall-sam-mvp-project
 ```
 
 ## Install
@@ -126,3 +129,4 @@ concierge-orchestration/
 - session continuity is driven by `session_id`
 - transformer parsing is optional and falls back to OpenAI
 - this service is the main LangGraph orchestration layer in the system
+- if `LANGSMITH_TRACING=true`, LangGraph traces are emitted automatically and direct OpenAI parsing calls are wrapped for nested LangSmith runs

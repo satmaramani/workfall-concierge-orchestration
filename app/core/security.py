@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, status
 
-from app.core.config import A2A_SHARED_TOKEN
+from app.core.config import A2A_SHARED_TOKEN, API_SHARED_TOKEN
 
 
 def require_agent_token(x_agent_token: str | None) -> None:
@@ -12,6 +12,14 @@ def require_agent_token(x_agent_token: str | None) -> None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid X-Agent-Token header",
+        )
+
+
+def require_api_token(x_api_token: str | None) -> None:
+    if API_SHARED_TOKEN and x_api_token != API_SHARED_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid X-API-Token header",
         )
 
 

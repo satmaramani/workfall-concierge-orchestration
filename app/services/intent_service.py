@@ -18,6 +18,7 @@ from app.core.config import (
     TRANSFORMER_MODEL,
 )
 from app.core.db import record_trace
+from app.core.langsmith_utils import maybe_wrap_openai
 from app.schemas.common import A2AContext
 from app.schemas.workflow import ParsedIntent
 
@@ -42,7 +43,7 @@ def get_openai_client() -> OpenAI:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="OPENAI_API_KEY is not configured for Concierge",
         )
-    return OpenAI(api_key=OPENAI_API_KEY)
+    return maybe_wrap_openai(OpenAI(api_key=OPENAI_API_KEY))
 
 
 def resolve_product_from_text(user_input: str, products: list[dict]) -> dict | None:

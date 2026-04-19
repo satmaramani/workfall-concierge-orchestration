@@ -5,6 +5,7 @@ python-dotenv
 httpx
 langgraph
 langchain
+langsmith
 openai
 psycopg[binary]
 sumy
