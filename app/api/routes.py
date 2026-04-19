@@ -19,7 +19,7 @@ from app.core.config import (
 from app.core.security import require_agent_token
 from app.core.utils import now_iso
 from app.schemas.common import A2AError, A2AMeta, A2ARequest, A2AResponse
-from app.schemas.workflow import WorkflowRequest
+from app.schemas.workflow import WorkflowFailureResponse, WorkflowRequest
 from app.services.session_service import fetch_session, fetch_traces
 
 
@@ -68,7 +68,25 @@ async def workflow_request(
     request: WorkflowRequest,
     orchestrate=Depends(get_orchestrator),
 ) -> dict:
-    return await orchestrate(request)
+    try:
+        return await orchestrate(request)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        return WorkflowFailureResponse(
+            session_id=request.session_id,
+            agents_used=["concierge"],
+            workflow_steps=[
+                {
+                    "agent": "concierge",
+                    "intent": "workflow_execution",
+                    "status": "failed",
+                    "error": str(exc),
+                }
+            ],
+            message="Concierge workflow failed unexpectedly. Check downstream services and traces.",
+            error_code="workflow_execution_error",
+        ).model_dump()
 
 
 @router.get("/sessions/{session_id}")

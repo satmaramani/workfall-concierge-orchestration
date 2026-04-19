@@ -24,3 +24,13 @@ class ParsedIntent(BaseModel):
     confidence: float = Field(ge=0, le=1)
     clarification_needed: bool = False
     clarification_question: str | None = None
+
+
+class WorkflowFailureResponse(BaseModel):
+    status: Literal["failed"]
+    session_id: str | None = None
+    intent: str = "unknown"
+    agents_used: list[str] = Field(default_factory=list)
+    workflow_steps: list[dict] = Field(default_factory=list)
+    message: str
+    error_code: str

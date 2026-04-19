@@ -12,7 +12,25 @@ from app.core.config import (
 )
 from app.core.db import record_trace
 from app.services.intent_service import parse_request_with_ai, parse_with_transformer, should_use_transformer
-from app.services.session_service import persist_session
+from app.services.session_service import get_session_memory, persist_session_with_summary
+
+
+def node_load_session_context(state):
+    prior_session = get_session_memory(state["session_id"])
+    record_trace(
+        service_name=SERVICE_NAME,
+        context=state["context"],
+        step_name="load_session_context",
+        step_type="graph_node",
+        status="success",
+        input_payload={"session_id": state["session_id"]},
+        output_payload={
+            "has_prior_session": bool(prior_session),
+            "last_intent": prior_session.get("last_intent") if prior_session else None,
+            "session_summary": prior_session.get("session_summary") if prior_session else None,
+        },
+    )
+    return {"prior_session": prior_session}
 
 
 async def node_fetch_inventory_catalog(state):
@@ -32,7 +50,13 @@ async def node_fetch_inventory_catalog(state):
 def node_transformer_parse(state, classifier):
     workflow_request = state["workflow_request"]
     products = state.get("products", [])
-    transformer_parse = parse_with_transformer(workflow_request.user_input, products, classifier, state["context"])
+    transformer_parse = parse_with_transformer(
+        workflow_request.user_input,
+        products,
+        classifier,
+        state["context"],
+        state.get("prior_session"),
+    )
     return {"transformer_parse": transformer_parse.model_dump() if transformer_parse else None}
 
 
@@ -60,6 +84,7 @@ def node_openai_parse(state):
         state.get("products", []),
         workflow_request.include_market_insights,
         state["context"],
+        state.get("prior_session"),
     )
     record_trace(
         service_name=SERVICE_NAME,
@@ -199,10 +224,21 @@ async def node_create_invoice(state):
         and workflow_request.include_market_insights,
     }
     response = await call_agent_with_retry(INVOICE_BASE_URL, "create_invoice", payload, state["context"])
+    invoice_result = response["result"]
+    downstream_agents = invoice_result.get("downstream_agents_used", [])
+    downstream_steps = invoice_result.get("workflow_steps", [])
     return {
-        "agents_used": ["invoice", "inventory", "market-intelligence"],
-        "workflow_steps": [{"agent": "invoice", "intent": "create_invoice", "status": response["status"]}],
-        "final_data": response["result"],
+        "agents_used": list(dict.fromkeys(["invoice", *downstream_agents])),
+        "workflow_steps": [
+            {
+                "agent": "invoice",
+                "intent": "create_invoice",
+                "status": response["status"],
+                "notes": "Invoice service orchestrated downstream inventory and market steps.",
+            }
+        ]
+        + downstream_steps,
+        "final_data": invoice_result,
     }
 
 
@@ -236,12 +272,13 @@ def node_persist_result(state):
     workflow_request = state["workflow_request"]
     parsed = state.get("parsed") or {"intent": "unknown"}
     if state.get("should_persist"):
-        persist_session(
-            state["session_id"],
-            workflow_request.user_id,
-            workflow_request.user_input,
-            parsed["intent"],
-            state["result"],
+        persist_session_with_summary(
+            session_id=state["session_id"],
+            user_id=workflow_request.user_id,
+            last_input=workflow_request.user_input,
+            last_intent=parsed["intent"],
+            last_response=state["result"],
+            prior_session=state.get("prior_session"),
         )
         record_trace(
             service_name=SERVICE_NAME,

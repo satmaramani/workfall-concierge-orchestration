@@ -12,6 +12,7 @@ from app.graphs.nodes import (
     node_clarification_failure,
     node_create_invoice,
     node_fetch_inventory_catalog,
+    node_load_session_context,
     node_list_products,
     node_market_analysis,
     node_missing_product_failure,
@@ -30,6 +31,7 @@ from app.schemas.common import A2AContext
 
 def build_concierge_graph(classifier):
     graph = StateGraph(ConciergeGraphState)
+    graph.add_node("load_session_context", node_load_session_context)
     graph.add_node("fetch_inventory_catalog", node_fetch_inventory_catalog)
     graph.add_node("transformer_parse", lambda state: node_transformer_parse(state, classifier))
     graph.add_node("use_transformer_parse", node_use_transformer_parse)
@@ -44,7 +46,8 @@ def build_concierge_graph(classifier):
     graph.add_node("aggregate_success", node_aggregate_success)
     graph.add_node("persist_result", node_persist_result)
 
-    graph.add_edge(START, "fetch_inventory_catalog")
+    graph.add_edge(START, "load_session_context")
+    graph.add_edge("load_session_context", "fetch_inventory_catalog")
     graph.add_edge("fetch_inventory_catalog", "transformer_parse")
     graph.add_conditional_edges(
         "transformer_parse",

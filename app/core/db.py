@@ -34,9 +34,16 @@ def init_db() -> None:
                     user_id TEXT NOT NULL,
                     last_input TEXT NOT NULL,
                     last_intent TEXT NOT NULL,
+                    session_summary TEXT,
                     last_response JSONB NOT NULL,
                     updated_at TIMESTAMPTZ NOT NULL
                 )
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE concierge_sessions
+                ADD COLUMN IF NOT EXISTS session_summary TEXT
                 """
             )
             cur.execute(
@@ -64,17 +71,27 @@ def init_db() -> None:
         conn.commit()
 
 
-def persist_session(session_id: str, user_id: str, last_input: str, last_intent: str, last_response: dict[str, Any]) -> None:
+def persist_session(
+    session_id: str,
+    user_id: str,
+    last_input: str,
+    last_intent: str,
+    last_response: dict[str, Any],
+    session_summary: str | None = None,
+) -> None:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO concierge_sessions (session_id, user_id, last_input, last_intent, last_response, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO concierge_sessions (
+                    session_id, user_id, last_input, last_intent, session_summary, last_response, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT(session_id) DO UPDATE SET
                     user_id = EXCLUDED.user_id,
                     last_input = EXCLUDED.last_input,
                     last_intent = EXCLUDED.last_intent,
+                    session_summary = EXCLUDED.session_summary,
                     last_response = EXCLUDED.last_response,
                     updated_at = EXCLUDED.updated_at
                 """,
@@ -83,6 +100,7 @@ def persist_session(session_id: str, user_id: str, last_input: str, last_intent:
                     user_id,
                     last_input,
                     last_intent,
+                    session_summary,
                     Jsonb(last_response),
                     now_iso(),
                 ),
@@ -95,7 +113,7 @@ def fetch_session(session_id: str) -> dict[str, Any] | None:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT session_id, user_id, last_input, last_intent, last_response, updated_at
+                SELECT session_id, user_id, last_input, last_intent, session_summary, last_response, updated_at
                 FROM concierge_sessions
                 WHERE session_id = %s
                 """,

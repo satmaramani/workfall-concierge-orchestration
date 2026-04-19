@@ -65,7 +65,67 @@ def resolve_product_from_text(user_input: str, products: list[dict]) -> dict | N
     return None
 
 
-def parse_with_transformer(user_input: str, products: list[dict], classifier, context: A2AContext) -> ParsedIntent | None:
+def build_transformer_input(user_input: str, prior_session: dict | None) -> str:
+    if not prior_session:
+        return user_input
+
+    session_summary = prior_session.get("session_summary")
+    last_intent = prior_session.get("last_intent")
+    last_input = prior_session.get("last_input")
+    if not session_summary and not last_intent and not last_input:
+        return user_input
+
+    context_parts = [
+        f"Current request: {user_input}",
+        f"Session summary: {session_summary}" if session_summary else None,
+        f"Last intent: {last_intent}" if last_intent else None,
+        f"Last request: {last_input}" if last_input else None,
+    ]
+    return " | ".join(part for part in context_parts if part)
+
+
+def _contains_followup_language(user_input: str) -> bool:
+    text = user_input.lower()
+    followup_markers = ["same", "it", "that", "them", "those", "again", "previous", "last one", "last product"]
+    return any(marker in text for marker in followup_markers)
+
+
+def apply_session_context(parsed: ParsedIntent, user_input: str, prior_session: dict | None) -> ParsedIntent:
+    if not prior_session:
+        return parsed
+
+    last_ai_parse = prior_session.get("last_ai_parse") or {}
+    if not last_ai_parse:
+        return parsed
+
+    followup = _contains_followup_language(user_input)
+
+    if not parsed.product_id and followup and last_ai_parse.get("product_id"):
+        parsed.product_id = last_ai_parse.get("product_id")
+        parsed.product_name = last_ai_parse.get("product_name")
+        parsed.clarification_needed = False
+        parsed.clarification_question = None
+
+    has_explicit_quantity = any(token.isdigit() for token in user_input.replace(",", " ").split())
+    if not has_explicit_quantity and followup and last_ai_parse.get("quantity"):
+        parsed.quantity = int(last_ai_parse["quantity"])
+
+    if parsed.intent == "unknown" and followup and last_ai_parse.get("intent"):
+        parsed.intent = last_ai_parse["intent"]
+        if parsed.product_id:
+            parsed.clarification_needed = False
+            parsed.clarification_question = None
+
+    return parsed
+
+
+def parse_with_transformer(
+    user_input: str,
+    products: list[dict],
+    classifier,
+    context: A2AContext,
+    prior_session: dict | None = None,
+) -> ParsedIntent | None:
     if not TRANSFORMER_ENABLED or not classifier:
         record_trace(
             service_name=SERVICE_NAME,
@@ -84,7 +144,8 @@ def parse_with_transformer(user_input: str, products: list[dict], classifier, co
         "list_products": "List products or show the product catalog",
         "unknown": "The request is unclear or unsupported",
     }
-    result = classifier(user_input, list(labels.values()), multi_label=False)
+    classifier_input = build_transformer_input(user_input, prior_session)
+    result = classifier(classifier_input, list(labels.values()), multi_label=False)
     top_label = result["labels"][0]
     confidence = float(result["scores"][0])
     label_to_intent = {value: key for key, value in labels.items()}
@@ -108,13 +169,19 @@ def parse_with_transformer(user_input: str, products: list[dict], classifier, co
         clarification_needed=clarification_needed,
         clarification_question=("Which product do you want to use for this request?" if clarification_needed else None),
     )
+    parsed = apply_session_context(parsed, user_input, prior_session)
     record_trace(
         service_name=SERVICE_NAME,
         context=context,
         step_name="transformer_parse",
         step_type="ai_call",
         status="success",
-        input_payload={"user_input": user_input, "product_count": len(products)},
+        input_payload={
+            "user_input": user_input,
+            "classifier_input": classifier_input,
+            "product_count": len(products),
+            "has_session_summary": bool((prior_session or {}).get("session_summary")),
+        },
         output_payload=parsed.model_dump(),
         model_name=TRANSFORMER_MODEL,
     )
@@ -126,6 +193,7 @@ def parse_request_with_ai(
     products: list[dict],
     include_market_insights: bool,
     context: A2AContext,
+    prior_session: dict | None = None,
 ) -> ParsedIntent:
     client = get_openai_client()
     product_catalog = [
@@ -149,6 +217,14 @@ def parse_request_with_ai(
         "user_input": user_input,
         "include_market_insights_requested": include_market_insights,
         "product_catalog": product_catalog,
+        "prior_session_context": {
+            "session_summary": prior_session.get("session_summary"),
+            "last_input": prior_session.get("last_input"),
+            "last_intent": prior_session.get("last_intent"),
+            "last_ai_parse": prior_session.get("last_ai_parse"),
+        }
+        if prior_session
+        else None,
     }
     response = client.responses.parse(
         model=OPENAI_MODEL,
@@ -165,6 +241,7 @@ def parse_request_with_ai(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="OpenAI could not parse the concierge request",
         )
+    parsed = apply_session_context(parsed, user_input, prior_session)
     usage = getattr(response, "usage", None)
     record_trace(
         service_name=SERVICE_NAME,

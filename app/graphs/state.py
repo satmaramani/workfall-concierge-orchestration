@@ -12,6 +12,7 @@ class ConciergeGraphState(TypedDict, total=False):
     workflow_request: WorkflowRequest
     session_id: str
     context: A2AContext
+    prior_session: dict[str, Any] | None
     products: list[dict[str, Any]]
     transformer_parse: dict[str, Any] | None
     parsed: dict[str, Any] | None
