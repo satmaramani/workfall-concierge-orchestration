@@ -30,6 +30,7 @@ from app.schemas.common import A2AContext
 
 
 def build_concierge_graph(classifier):
+    # The graph is intentionally explicit so the routing path is easy to explain in reviews and demos.
     graph = StateGraph(ConciergeGraphState)
     graph.add_node("load_session_context", node_load_session_context)
     graph.add_node("fetch_inventory_catalog", node_fetch_inventory_catalog)
@@ -94,6 +95,7 @@ def build_concierge_graph(classifier):
 
 
 async def run_concierge_graph(graph, workflow_request):
+    # Each request gets a fresh workflow and trace id, while the session id can be reused across turns.
     session_id = workflow_request.session_id or str(uuid4())
     context = A2AContext(
         session_id=session_id,

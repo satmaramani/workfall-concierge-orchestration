@@ -21,6 +21,7 @@ def build_session_memory_text(
     last_intent: str,
     last_response: dict,
 ) -> str:
+    # The summary source text is intentionally plain so both Sumy and the fallback truncation stay predictable.
     ai_parse = last_response.get("ai_parse") or {}
     result_data = last_response.get("data") or {}
     lines = [
@@ -46,6 +47,7 @@ def summarize_session_memory(memory_text: str) -> str:
         return ""
 
     try:
+        # Sumy gives us a cheap local summary, which is enough for session carry-over in this MVP.
         from sumy.nlp.tokenizers import Tokenizer
         from sumy.parsers.plaintext import PlaintextParser
         from sumy.summarizers.lsa import LsaSummarizer

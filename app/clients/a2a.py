@@ -14,6 +14,7 @@ from app.schemas.common import A2AContext, A2ARequest
 
 
 async def call_agent(base_url: str, intent: str, payload: dict, context: A2AContext) -> dict:
+    # The envelope keeps A2A calls consistent even though the downstream services are separate repos.
     request = A2ARequest(
         request_id=str(uuid4()),
         source_agent="concierge",
@@ -49,6 +50,7 @@ async def call_agent_with_retry(
     context: A2AContext,
     max_attempts: int = 2,
 ) -> dict:
+    # Retries are small and bounded on purpose; long retry loops would make the UI feel stuck.
     last_error: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:

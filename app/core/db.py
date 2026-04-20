@@ -25,6 +25,7 @@ def get_connection() -> psycopg.Connection[Any]:
 
 
 def init_db() -> None:
+    # Concierge owns session memory and workflow traces, so both tables are created during startup.
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -79,6 +80,7 @@ def persist_session(
     last_response: dict[str, Any],
     session_summary: str | None = None,
 ) -> None:
+    # Upsert keeps one current session snapshot rather than growing an unbounded chat-history table.
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -138,6 +140,7 @@ def record_trace(
     completion_tokens: int | None = None,
     total_tokens: int | None = None,
 ) -> None:
+    # All services write traces in a common shape so the UI can render them without service-specific logic.
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(

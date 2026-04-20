@@ -15,6 +15,7 @@ from app.schemas.workflow import WorkflowRequest
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup is kept in one place so local runs and Docker behave the same way.
     try:
         init_db()
         app.state.db_available = True
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
         app.state.db_available = False
         raise
     try:
+        # The transformer is optional; Concierge can still fall back to OpenAI if it is unavailable.
         app.state.intent_classifier = build_transformer_classifier()
         app.state.transformer_available = app.state.intent_classifier is not None
     except Exception:
@@ -41,5 +43,6 @@ app.include_router(router)
 
 
 async def orchestrate(workflow_request: WorkflowRequest) -> dict:
+    # Reuse the compiled graph when possible so each request only pays for execution, not setup.
     graph = app.state.concierge_graph or build_concierge_graph(app.state.intent_classifier)
     return await run_concierge_graph(graph, workflow_request)

@@ -7,6 +7,7 @@ from app.services.memory_service import build_session_memory_text, summarize_ses
 
 
 def get_session_memory(session_id: str | None) -> dict | None:
+    # The returned shape is tuned for prompt-building, not as a full copy of the database row.
     if not session_id:
         return None
     session = fetch_session(session_id)
@@ -35,6 +36,7 @@ def persist_session_with_summary(
     last_response: dict,
     prior_session: dict | None,
 ) -> None:
+    # We store both the full last response and a short rolling summary so future turns can stay cheap.
     memory_text = build_session_memory_text(
         prior_summary=(prior_session or {}).get("session_summary"),
         last_input=last_input,

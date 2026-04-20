@@ -47,6 +47,7 @@ def get_openai_client() -> OpenAI:
 
 
 def resolve_product_from_text(user_input: str, products: list[dict]) -> dict | None:
+    # Product matching stays deliberately simple: exact phrases first, fuzzy matching only as a backup.
     text = user_input.lower()
     candidates: dict[str, dict] = {}
     for product in products:
@@ -67,6 +68,7 @@ def resolve_product_from_text(user_input: str, products: list[dict]) -> dict | N
 
 
 def build_transformer_input(user_input: str, prior_session: dict | None) -> str:
+    # A small amount of prior context helps the classifier with follow-up prompts without sending full history.
     if not prior_session:
         return user_input
 
@@ -92,6 +94,7 @@ def _contains_followup_language(user_input: str) -> bool:
 
 
 def apply_session_context(parsed: ParsedIntent, user_input: str, prior_session: dict | None) -> ParsedIntent:
+    # This is lightweight memory, not full chat replay: reuse only the fields that matter operationally.
     if not prior_session:
         return parsed
 
@@ -147,6 +150,7 @@ def parse_with_transformer(
     }
     classifier_input = build_transformer_input(user_input, prior_session)
     result = classifier(classifier_input, list(labels.values()), multi_label=False)
+    # The transformer handles the first-pass classification; OpenAI is reserved for lower-confidence cases.
     top_label = result["labels"][0]
     confidence = float(result["scores"][0])
     label_to_intent = {value: key for key, value in labels.items()}
@@ -197,6 +201,7 @@ def parse_request_with_ai(
     prior_session: dict | None = None,
 ) -> ParsedIntent:
     client = get_openai_client()
+    # OpenAI gets the live catalog plus compact prior-session context so it can recover ambiguous prompts.
     product_catalog = [
         {
             "product_id": item["product_id"],
@@ -265,6 +270,7 @@ def parse_request_with_ai(
 
 
 def should_use_transformer(parse: dict | None) -> bool:
+    # Clarification-worthy results still go to the fallback path even if the raw confidence looks decent.
     return bool(
         parse
         and parse["confidence"] >= INTENT_CONFIDENCE_THRESHOLD

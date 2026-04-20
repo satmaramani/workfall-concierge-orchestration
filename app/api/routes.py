@@ -26,6 +26,7 @@ from app.services.session_service import fetch_session, fetch_traces
 
 
 def get_orchestrator():
+    # Import lazily to avoid circular imports during app startup.
     from app.main import orchestrate
 
     return orchestrate
@@ -88,6 +89,7 @@ async def workflow_request(
     except HTTPException:
         raise
     except Exception as exc:
+        # This fallback keeps the UI structured even if an unexpected exception slips through.
         return WorkflowFailureResponse(
             status="failed",
             session_id=request.session_id,
@@ -118,6 +120,7 @@ def get_session(session_id: str, x_api_token: str | None = Header(default=None))
 def get_traces(session_id: str, x_api_token: str | None = Header(default=None)) -> dict:
     require_api_token(x_api_token)
     rows = fetch_traces(session_id)
+    # Traces are normalized here so the UI does not need to know about database timestamp objects.
     return {
         "session_id": session_id,
         "events": [{**row, "created_at": row["created_at"].isoformat()} for row in rows],

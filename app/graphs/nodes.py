@@ -16,6 +16,7 @@ from app.services.session_service import get_session_memory, persist_session_wit
 
 
 def node_load_session_context(state):
+    # Session memory is loaded first so follow-up prompts can reuse the previous product or intent.
     prior_session = get_session_memory(state["session_id"])
     record_trace(
         service_name=SERVICE_NAME,
@@ -34,6 +35,7 @@ def node_load_session_context(state):
 
 
 async def node_fetch_inventory_catalog(state):
+    # Concierge keeps a local copy of the catalog for intent parsing instead of asking Inventory repeatedly.
     products = await fetch_inventory_catalog()
     record_trace(
         service_name=SERVICE_NAME,
@@ -65,6 +67,7 @@ def route_after_transformer(state):
 
 
 def node_use_transformer_parse(state):
+    # Once the transformer path is chosen, we persist that decision into the trace for later debugging.
     record_trace(
         service_name=SERVICE_NAME,
         context=state["context"],
@@ -99,6 +102,7 @@ def node_openai_parse(state):
 
 
 def route_after_parse(state):
+    # The graph separates "unclear request" from "known intent but missing product" for better UX.
     parsed = state.get("parsed") or {}
     if parsed.get("intent") == "unknown" or parsed.get("clarification_needed"):
         return "clarification"
@@ -227,6 +231,7 @@ async def node_create_invoice(state):
     invoice_result = response["result"]
     downstream_agents = invoice_result.get("downstream_agents_used", [])
     downstream_steps = invoice_result.get("workflow_steps", [])
+    # Concierge reports both its own invoice call and the nested downstream steps surfaced by Invoice.
     return {
         "agents_used": list(dict.fromkeys(["invoice", *downstream_agents])),
         "workflow_steps": [
@@ -272,6 +277,7 @@ def node_persist_result(state):
     workflow_request = state["workflow_request"]
     parsed = state.get("parsed") or {"intent": "unknown"}
     if state.get("should_persist"):
+        # Persisting after both success and controlled failure keeps follow-up turns grounded in real outcomes.
         persist_session_with_summary(
             session_id=state["session_id"],
             user_id=workflow_request.user_id,
